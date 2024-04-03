@@ -17,7 +17,7 @@ cd query_quickgo
 ```
 ## An example run
 ```
-python query_quickgo.py search respiration
+python query_quickgo.py search -q respiration
 ```
 
 There are eight subcommands: `chart`, `swissprot`, `coterms`,
