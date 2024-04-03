@@ -1,6 +1,6 @@
 # query_quickgo
 
-This Python3 script provides builds URL requests for QuickGO API based
+This Python3 script builds URL requests for QuickGO API based
 on provided arguments, sends it to QuickGO, and processes the
 response.
 
