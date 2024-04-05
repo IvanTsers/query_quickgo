@@ -11,6 +11,9 @@ def print_non_obsolete_table(x, cols):
     '''
     Prints specified columns of x where isObsolete==False to stdout.
     '''
+    if x.empty:
+        print("The result is empty", file = sys.stderr)
+        sys.exit(1)
     x = x[x['isObsolete'] == False]
     print(len(x), "terms are non-obsolete", file = sys.stderr)
     x = x[cols]
@@ -29,6 +32,9 @@ def print_non_obsolete_report(x, header, content):
     and content is some long description
 
     '''
+    if x.empty:
+        print("The result is empty", file = sys.stderr)
+        sys.exit(1)
     x = x[x['isObsolete'] == False]
     print(len(x), "terms are non-obsolete", file = sys.stderr)
     for i, row in x.iterrows():
@@ -45,7 +51,7 @@ def read_ids():
     wrong_args = ids_passed & ((args.idtsv is not None) | (args.idcol is not None))
     if wrong_args:
         print('Please specify comma-separated terms (-ids) or a column in a file (-idtsv and -idcol)')
-        sys.exit()
+        sys.exit(1)
     elif ids_passed:
         ids = args.ids
         return ids
@@ -54,7 +60,7 @@ def read_ids():
         return ids
     else:
         print('Please specify comma-separated terms (-ids) or a column in a file (-idtsv and -idcol)')
-        sys.exit()
+        sys.exit(1)
 
 # We define the main parser
 
@@ -71,9 +77,9 @@ e-mail: tsers@evolbio.mpg.de''',
 subparsers = parser.add_subparsers(dest = 'command')
 
 # We add a subparser for the 'chart' request
-chart = subparsers.add_parser('chart', description = '''Download a png
-chart of a GO term. If multiple GO terms are scpecified, all of them
-will appear at the same chart.''')
+chart = subparsers.add_parser('chart', description =
+                              '''Download a png chart for a GO term. If multiple GO terms are
+                              specified, all of them will appear on the same chart.''')
 chart.add_argument('-ids', type = str, help = 'comma-separated GO ids')
 chart.add_argument('-idtsv', type = str, default = None,
                     help = 'name of a tsv file containing a column of GO terms')
@@ -82,7 +88,8 @@ chart.add_argument('-idcol', type = str, default = None,
 chart.add_argument('-bh', type = int, help = 'term box height in pixels')
 chart.add_argument('-bw', type = int, help = 'term box width in pixels')
 chart.add_argument('-fs', type = int, help = 'text font size in pixels')
-chart.add_argument('-out', type = str, default = 'chart.png', help = 'output file')
+chart.add_argument('-out', type = str, default = None, help =
+                   '''output file name. If none, the output is directed to stdout''')
 chart.add_argument('-c', action = 'store_true', help = 'show children')
 chart.add_argument('-nokey', action = 'store_false', help = 'hide key (legend)')
 
@@ -231,18 +238,31 @@ content = bytearray()
 # We send the request and stream it. We print the number of received
 # bytes to track the progress
 print("Sending the request...", file = sys.stderr)
-with requests.get(requestURL, params = params, headers = headers,
-                  stream = True) as r:
-    if not r.ok:
+try:
+    r = requests.get(requestURL, params = params, headers = headers,
+                 stream = True)
+    if r.ok:
         r.raise_for_status()
-        sys.exit()
-
-    for i in r.iter_content():
-       content.extend(i)
-       print (len(content), end = " Bytes received...\r", file = sys.stderr)
-print (len(content), "Bytes received", file = sys.stderr)
-
+        for i in r.iter_content():
+            content.extend(i)
+            print(len(content), end = " bytes received...\r", file = sys.stderr, flush = True)
+        print(len(content), "bytes received", file = sys.stderr)
+    else:
+        print(f"Error: HTTP status code {r.status_code}", file = sys.stderr)
+        sys.exit(1)
+except requests.HTTPError as e:
+    print(f"Error: HTTP status code {e.r.status_code}", file = sys.stderr)
+    sys.exit(1)
+    
 # We print the output
+if args.command == 'chart':
+    if args.out is not None:
+        with open(args.out, 'wb') as o:
+            o.write(content)
+            o.close()
+    else:
+        sys.stdout.buffer.write(content)
+
 if args.command == 'swissprot':
     # We cast a table using the bytes from the API response
     print('Formatting the output...', file = sys.stderr)
@@ -266,7 +286,6 @@ elif args.command == 'define':
 
     if args.report:
         print_non_obsolete_report(df, ["id", "aspect", "name"], "definition.text")
-        
     else:
         print_non_obsolete_table(df, ["id", "aspect", "name", "definition.text"])
 
@@ -318,8 +337,3 @@ elif args.command == 'children':
     print(have_children, "of the terms have children", file = sys.stderr)
     print(len(df), "children found", file = sys.stderr)
     df.to_csv(sys.stdout, sep='\t', index = False)
-
-else:
-    with open(args.out, 'wb') as o:
-        o.write(content)
-        o.close()
